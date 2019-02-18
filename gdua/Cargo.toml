@@ -1,0 +1,11 @@
+[package]
+name = "gdua"
+version = "0.1.0"
+authors = ["pbzweihander <pbzweihander@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+tokio = "0.1.15"
+futures = "0.1.25"
+web-view = "0.4.0"
+gdua-core = { path = "../gdua-core" }
