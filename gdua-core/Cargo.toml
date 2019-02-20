@@ -6,4 +6,6 @@ edition = "2018"
 
 [dependencies]
 tokio = "0.1.15"
+tokio-fs = "0.1.5"
 futures = "0.1.25"
+failure = "0.1.5"
