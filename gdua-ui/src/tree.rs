@@ -200,52 +200,39 @@ impl Renderable<TreeView> for TreeView {
     }
 }
 
-fn merge_tree(tree: &mut Vec<Tree>, mut sub_tree: Vec<Node>, leaf: Leaf) {
-    if let Some(last) = sub_tree.pop() {
-        if let Some((i, _)) = tree.iter().enumerate().find(|(_, n)| {
-            if let Tree::Node(n) = n {
-                n == &last
-            } else {
-                false
-            }
-        }) {
-            if let Some(Tree::Node(n)) = tree.get_mut(i) {
-                if sub_tree.is_empty() {
-                    n.children.push(Tree::Leaf(leaf));
-                } else {
-                    merge_tree(&mut n.children, sub_tree, leaf);
+fn merge_tree(tree: &mut Vec<Tree>, mut ancestors: Vec<PathBuf>, leaf: Leaf) {
+    if let Some(outermost) = ancestors.pop() {
+        for node in tree.iter_mut() {
+            if let Tree::Node(ref mut node) = node {
+                if node.path == outermost {
+                    merge_tree(&mut node.children, ancestors, leaf);
+                    return;
                 }
             }
-        } else {
-            let new_tree = sub_tree.into_iter().fold(Tree::Leaf(leaf), |acc, node| {
-                Tree::Node(Node {
-                    path: node.path,
-                    children: vec![acc],
-                })
-            });
-
-            tree.push(Tree::Node(Node {
-                path: last.path,
-                children: vec![new_tree],
-            }));
         }
+
+        let new_tree = ancestors.into_iter().fold(Tree::Leaf(leaf), |acc, path| {
+            Tree::Node(Node {
+                path: path,
+                children: vec![acc],
+            })
+        });
+
+        tree.push(Tree::Node(Node {
+            path: outermost,
+            children: vec![new_tree],
+        }));
+    } else {
+        tree.push(Tree::Leaf(leaf));
     }
 }
 
 fn insert_to_tree(tree: &mut Vec<Tree>, entry: &FileEntry) {
-    let mut ancestors = entry.path.ancestors().map(Path::to_path_buf).filter(|p| {
-        p.file_name()
-            .map(|s| !s.is_empty())
-            .unwrap_or_else(|| false)
-    });
-
+    let mut ancestors = entry.path.ancestors();
     ancestors.next();
-
-    let ancestors = ancestors
-        .map(|path| Node {
-            path,
-            children: vec![],
-        })
+    let ancestors: Vec<_> = ancestors
+        .map(Path::to_path_buf)
+        .filter(|p| p.file_name().map(|s| !s.is_empty()).unwrap_or_default())
         .collect();
 
     let leaf = Leaf {
