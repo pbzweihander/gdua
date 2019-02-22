@@ -224,10 +224,3 @@ fn insert_to_tree(tree: &mut Vec<Tree>, entry: &FileEntry) {
 
     merge_tree(tree, ancestors, leaf);
 }
-
-fn construct_tree(entries: &[FileEntry]) -> Vec<Tree> {
-    entries.iter().fold(vec![], |mut acc, entry| {
-        insert_to_tree(&mut acc, entry);
-        acc
-    })
-}
