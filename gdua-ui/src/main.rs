@@ -5,14 +5,24 @@ use {
     yew::{html, prelude::*},
 };
 
-struct Model {}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FileEntry {
+    pub path: std::path::PathBuf,
+    pub size: u64,
+}
 
-impl Component for Model {
+struct App {
+    data: Vec<FileEntry>,
+}
+
+impl Component for App {
     type Message = ();
     type Properties = ();
 
     fn create(_: Self::Properties, _: ComponentLink<Self>) -> Self {
-        Model {}
+        let data = vec![];
+
+        App { data }
     }
 
     fn update(&mut self, _: Self::Message) -> ShouldRender {
@@ -20,47 +30,16 @@ impl Component for Model {
     }
 }
 
-impl Renderable<Model> for Model {
+impl Renderable<App> for App {
     fn view(&self) -> Html<Self> {
-        use tree::{TreeViewData, TreeViewNode};
-
-        let data = vec![
-            TreeViewData::Node(TreeViewNode {
-                label: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_string(),
-                children: vec![
-                    TreeViewData::Leaf(
-                        "Phasellus at turpis pharetra, mattis sem et, tincidunt neque.".to_string(),
-                    ),
-                    TreeViewData::Leaf("Etiam ac augue ut risus euismod elementum.".to_string()),
-                    TreeViewData::Node(TreeViewNode {
-                        label: "Quisque mattis massa et lorem condimentum rutrum.".to_string(),
-                        children: vec![
-                            TreeViewData::Leaf(
-                                "Nam a massa aliquam, efficitur orci porttitor, facilisis urna."
-                                    .to_string(),
-                            ),
-                            TreeViewData::Leaf(
-                                "Cras vitae turpis id magna facilisis lobortis.".to_string(),
-                            ),
-                        ],
-                        opened: false,
-                    }),
-                ],
-                opened: true,
-            }),
-            TreeViewData::Leaf(
-                "Suspendisse a massa in lorem malesuada egestas eu id enim.".to_string(),
-            ),
-        ];
-
         html! {
-            <div style="padding: 1rem;",>
-                <TreeView<String>: data=data,/>
+            <div style="padding: 2rem;",>
+                <TreeView: data=self.data.clone(),/>
             </div>
         }
     }
 }
 
 fn main() {
-    yew::start_app::<Model>();
+    yew::start_app::<App>();
 }
