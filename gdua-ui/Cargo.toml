@@ -5,5 +5,5 @@ authors = ["pbzweihander <pbzweihander@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-yew = "0.5.0"
+yew = { git = "https://github.com/DenisKolodin/yew", branch = "master" }
 stdweb = "0.4.14"
