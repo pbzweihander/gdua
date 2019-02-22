@@ -1,5 +1,6 @@
 use {
     futures::prelude::*,
+    serde_derive::Serialize,
     std::path::PathBuf,
     tokio::{self, fs},
 };
@@ -27,7 +28,7 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FileEntry {
     pub path: PathBuf,
     pub size: u64,
