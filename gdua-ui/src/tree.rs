@@ -1,64 +1,72 @@
 use {
-    std::fmt::{Debug, Display},
+    crate::FileEntry,
+    std::{
+        collections::HashSet,
+        path::{Path, PathBuf},
+    },
     yew::{html, prelude::*},
 };
 
 #[derive(Debug, Clone)]
-pub struct TreeViewNode<T> {
-    pub label: T,
-    pub children: Vec<TreeViewData<T>>,
-    pub opened: bool,
+pub struct TreeView {
+    data: Vec<FileEntry>,
+    tree: Vec<Tree>,
+    opened_entries: HashSet<PathBuf>,
 }
 
-impl<T> PartialEq for TreeViewNode<T>
-where
-    T: PartialEq,
-{
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct TreeViewProps {
+    pub data: Vec<FileEntry>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TreeViewMsg {
+    Nothing,
+    ToggleOpened(PathBuf),
+}
+
+#[derive(Debug, Clone)]
+struct Node {
+    path: PathBuf,
+    children: Vec<Tree>,
+}
+
+impl PartialEq for Node {
     fn eq(&self, other: &Self) -> bool {
-        self.label.eq(&other.label)
+        self.path.eq(&other.path)
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum TreeViewData<T> {
-    Node(TreeViewNode<T>),
-    Leaf(T),
+struct Leaf {
+    path: PathBuf,
+    size: u64,
 }
 
-impl<T> PartialEq for TreeViewData<T>
-where
-    T: PartialEq,
-{
+impl PartialEq for Leaf {
+    fn eq(&self, other: &Self) -> bool {
+        self.path.eq(&other.path)
+    }
+}
+
+#[derive(Debug, Clone)]
+enum Tree {
+    Node(Node),
+    Leaf(Leaf),
+}
+
+impl PartialEq for Tree {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (TreeViewData::Node(ref s), TreeViewData::Node(ref o)) => s.eq(o),
-            (TreeViewData::Leaf(ref s), TreeViewData::Leaf(ref o)) => s.eq(o),
+            (Tree::Node(ref n1), Tree::Node(ref n2)) => n1.eq(n2),
+            (Tree::Leaf(ref l1), Tree::Leaf(ref l2)) => l1.eq(l2),
             _ => false,
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct TreeView<T> {
-    data: Vec<TreeViewData<T>>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct TreeViewProps<T> {
-    pub data: Vec<TreeViewData<T>>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TreeViewMsg<T> {
-    Nothing,
-    ToggleOpened(T),
-}
-
-impl<T> TreeView<T>
-where
-    T: Debug + Display + Clone + Default + PartialEq + 'static,
-{
-    fn render_li(inner: Html<Self>, nested: usize, onclick_msg: TreeViewMsg<T>) -> Html<Self> {
+impl TreeView {
+    fn render_li(inner: Html<Self>, nested: usize, onclick_msg: TreeViewMsg) -> Html<Self> {
         let disabled = onclick_msg == TreeViewMsg::Nothing;
 
         html! {
@@ -73,30 +81,32 @@ where
         }
     }
 
-    fn render_node(node: &TreeViewNode<T>, nested: usize) -> Html<Self> {
-        let inner = if node.opened {
+    fn render_node(&self, node: &Node, depth: usize) -> Html<Self> {
+        let opened = self.opened_entries.contains(&node.path);
+
+        let inner = if opened {
             html! {
                 <>
                     <i class="fas fa-chevron-down", />
-                    { &node.label }
+                    { node.path.file_name().unwrap_or_default().to_string_lossy() }
                 </>
             }
         } else {
             html! {
                 <>
                     <i class="fas fa-chevron-right", />
-                    { &node.label }
+                    { node.path.file_name().unwrap_or_default().to_string_lossy() }
                 </>
             }
         };
-        let msg = TreeViewMsg::ToggleOpened(node.label.clone());
-        let li = Self::render_li(inner, nested, msg);
+        let msg = TreeViewMsg::ToggleOpened(node.path.clone());
+        let li = Self::render_li(inner, depth, msg);
 
-        if node.opened {
+        if opened {
             html! {
                 <>
                     { li }
-                    { Self::render_list(&node.children, nested + 1) }
+                    { self.render_list(&node.children, depth + 1) }
                 </>
             }
         } else {
@@ -108,71 +118,133 @@ where
         }
     }
 
-    fn render_leaf(t: &T, nested: usize) -> Html<Self> {
-        Self::render_li(html! { <> { t } </> }, nested, TreeViewMsg::Nothing)
+    fn render_leaf(leaf: &Leaf, depth: usize) -> Html<Self> {
+        Self::render_li(
+            html! {
+                <>
+                    { leaf.path.file_name().unwrap_or_default().to_string_lossy() }
+                    { " " }
+                    <span class="badge badge-pill badge-secondary",>
+                        { leaf.size }
+                    </span>
+                </>
+            },
+            depth,
+            TreeViewMsg::Nothing,
+        )
     }
 
-    fn render_list(data: &[TreeViewData<T>], nested: usize) -> Html<Self> {
+    fn render_tree(&self, tree: &Tree, depth: usize) -> Html<Self> {
+        match *tree {
+            Tree::Leaf(ref leaf) => Self::render_leaf(leaf, depth),
+            Tree::Node(ref node) => self.render_node(node, depth),
+        }
+    }
+
+    fn render_list(&self, tree: &[Tree], depth: usize) -> Html<Self> {
         html! {
-            <div class=if nested == 0 { "list-group list-group-root" } else { "list-group" },>
-                { for data.iter().map(|d| Self::render_data(d, nested))}
+            <div class=if depth == 0 { "list-group list-group-root" } else { "list-group" },>
+                { for tree.iter().map(|d| self.render_tree(d, depth))}
             </div>
         }
     }
-
-    fn render_data(data: &TreeViewData<T>, nested: usize) -> Html<Self> {
-        match *data {
-            TreeViewData::Leaf(ref d) => Self::render_leaf(d, nested),
-            TreeViewData::Node(ref n) => Self::render_node(n, nested),
-        }
-    }
-
-    fn toggle_data(data: &mut Vec<TreeViewData<T>>, label: &T) -> bool {
-        for d in data.iter_mut() {
-            match d {
-                TreeViewData::Leaf(_) => (),
-                TreeViewData::Node(ref mut n) => {
-                    if &n.label == label {
-                        n.opened = !n.opened;
-                        return true;
-                    } else if Self::toggle_data(&mut n.children, label) {
-                        return true;
-                    }
-                }
-            }
-        }
-        false
-    }
 }
 
-impl<T> Component for TreeView<T>
-where
-    T: Debug + Display + Clone + Default + PartialEq + 'static,
-{
-    type Message = TreeViewMsg<T>;
-    type Properties = TreeViewProps<T>;
+impl Component for TreeView {
+    type Message = TreeViewMsg;
+    type Properties = TreeViewProps;
 
-    fn create(props: Self::Properties, _: ComponentLink<Self>) -> Self {
-        TreeView { data: props.data }
+    fn create(props: TreeViewProps, _: ComponentLink<Self>) -> Self {
+        TreeView {
+            tree: construct_tree_from_entry(&props.data),
+            data: props.data,
+            opened_entries: HashSet::new(),
+        }
     }
 
     fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
             TreeViewMsg::Nothing => false,
-            TreeViewMsg::ToggleOpened(ref label) => Self::toggle_data(&mut self.data, label),
+            TreeViewMsg::ToggleOpened(path) => {
+                if self.opened_entries.contains(&path) {
+                    self.opened_entries.remove(&path)
+                } else {
+                    self.opened_entries.insert(path)
+                }
+            }
+        }
+    }
+
+    fn change(&mut self, props: TreeViewProps) -> bool {
+        self.tree = construct_tree_from_entry(&props.data);
+        true
+    }
+}
+
+impl Renderable<TreeView> for TreeView {
+    fn view(&self) -> Html<Self> {
+        html! {
+            <>
+                { self.render_list(&self.tree, 0) }
+            </>
         }
     }
 }
 
-impl<T> Renderable<TreeView<T>> for TreeView<T>
-where
-    T: Debug + Display + Clone + Default + PartialEq + 'static,
-{
-    fn view(&self) -> Html<Self> {
-        html! {
-            <div style="width: 50%;",>
-                { Self::render_list(&self.data, 0) }
-            <div/>
+fn construct_tree_from_entry(entries: &[FileEntry]) -> Vec<Tree> {
+    entries
+        .iter()
+        .map(|entry| {
+            let mut ancestors = entry.path.ancestors().map(Path::to_path_buf);
+            ancestors.next();
+
+            let ancestors = ancestors
+                .map(|path| Node {
+                    path,
+                    children: vec![],
+                })
+                .collect();
+            let leaf = Leaf {
+                path: entry.path.clone(),
+                size: entry.size,
+            };
+
+            (ancestors, leaf)
+        })
+        .fold(vec![], |mut acc, (sub_tree, leaf)| {
+            construct_tree(&mut acc, sub_tree, leaf);
+            acc
+        })
+}
+
+fn construct_tree(acc: &mut Vec<Tree>, mut sub_tree: Vec<Node>, leaf: Leaf) {
+    if let Some(last) = sub_tree.pop() {
+        if let Some((i, _)) = acc.iter().enumerate().find(|(_, n)| {
+            if let Tree::Node(n) = n {
+                n == &last
+            } else {
+                false
+            }
+        }) {
+            if let Some(Tree::Node(n)) = acc.get_mut(i) {
+                if sub_tree.is_empty() {
+                    n.children.push(Tree::Leaf(leaf));
+                } else {
+                    construct_tree(&mut n.children, sub_tree, leaf);
+                }
+            }
+        } else {
+            let new_tree = sub_tree.into_iter().fold(Tree::Leaf(leaf), |acc, node| {
+                Tree::Node(Node {
+                    path: node.path,
+                    children: vec![acc],
+                })
+            });
+
+            acc.push(Tree::Node(Node {
+                path: last.path,
+                children: vec![new_tree],
+            }));
         }
     }
 }
