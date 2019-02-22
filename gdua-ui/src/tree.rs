@@ -7,11 +7,10 @@ use {
     yew::{html, prelude::*},
 };
 
-#[derive(Debug, Clone)]
 pub struct TreeView {
-    data: Vec<FileEntry>,
     tree: Vec<Tree>,
     opened_entries: HashSet<PathBuf>,
+    entries: HashSet<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -156,9 +155,9 @@ impl Component for TreeView {
 
     fn create(props: TreeViewProps, _: ComponentLink<Self>) -> Self {
         TreeView {
-            tree: construct_tree_from_entry(&props.data),
-            data: props.data,
+            tree: construct_tree(&props.data),
             opened_entries: HashSet::new(),
+            entries: props.data.into_iter().map(|entry| entry.path).collect(),
         }
     }
 
@@ -175,9 +174,19 @@ impl Component for TreeView {
         }
     }
 
-    fn change(&mut self, props: TreeViewProps) -> bool {
-        self.tree = construct_tree_from_entry(&props.data);
-        true
+    #[allow(clippy::map_entry)]
+    fn change(&mut self, props: TreeViewProps) -> ShouldRender {
+        let mut changed = false;
+
+        for entry in props.data {
+            if !self.entries.contains(&entry.path) {
+                insert_to_tree(&mut self.tree, &entry);
+                self.entries.insert(entry.path);
+                changed = true;
+            }
+        }
+
+        changed
     }
 }
 
@@ -191,46 +200,20 @@ impl Renderable<TreeView> for TreeView {
     }
 }
 
-fn construct_tree_from_entry(entries: &[FileEntry]) -> Vec<Tree> {
-    entries
-        .iter()
-        .map(|entry| {
-            let mut ancestors = entry.path.ancestors().map(Path::to_path_buf);
-            ancestors.next();
-
-            let ancestors = ancestors
-                .map(|path| Node {
-                    path,
-                    children: vec![],
-                })
-                .collect();
-            let leaf = Leaf {
-                path: entry.path.clone(),
-                size: entry.size,
-            };
-
-            (ancestors, leaf)
-        })
-        .fold(vec![], |mut acc, (sub_tree, leaf)| {
-            construct_tree(&mut acc, sub_tree, leaf);
-            acc
-        })
-}
-
-fn construct_tree(acc: &mut Vec<Tree>, mut sub_tree: Vec<Node>, leaf: Leaf) {
+fn merge_tree(tree: &mut Vec<Tree>, mut sub_tree: Vec<Node>, leaf: Leaf) {
     if let Some(last) = sub_tree.pop() {
-        if let Some((i, _)) = acc.iter().enumerate().find(|(_, n)| {
+        if let Some((i, _)) = tree.iter().enumerate().find(|(_, n)| {
             if let Tree::Node(n) = n {
                 n == &last
             } else {
                 false
             }
         }) {
-            if let Some(Tree::Node(n)) = acc.get_mut(i) {
+            if let Some(Tree::Node(n)) = tree.get_mut(i) {
                 if sub_tree.is_empty() {
                     n.children.push(Tree::Leaf(leaf));
                 } else {
-                    construct_tree(&mut n.children, sub_tree, leaf);
+                    merge_tree(&mut n.children, sub_tree, leaf);
                 }
             }
         } else {
@@ -241,10 +224,41 @@ fn construct_tree(acc: &mut Vec<Tree>, mut sub_tree: Vec<Node>, leaf: Leaf) {
                 })
             });
 
-            acc.push(Tree::Node(Node {
+            tree.push(Tree::Node(Node {
                 path: last.path,
                 children: vec![new_tree],
             }));
         }
     }
+}
+
+fn insert_to_tree(tree: &mut Vec<Tree>, entry: &FileEntry) {
+    let mut ancestors = entry.path.ancestors().map(Path::to_path_buf).filter(|p| {
+        p.file_name()
+            .map(|s| !s.is_empty())
+            .unwrap_or_else(|| false)
+    });
+
+    ancestors.next();
+
+    let ancestors = ancestors
+        .map(|path| Node {
+            path,
+            children: vec![],
+        })
+        .collect();
+
+    let leaf = Leaf {
+        path: entry.path.clone(),
+        size: entry.size,
+    };
+
+    merge_tree(tree, ancestors, leaf);
+}
+
+fn construct_tree(entries: &[FileEntry]) -> Vec<Tree> {
+    entries.iter().fold(vec![], |mut acc, entry| {
+        insert_to_tree(&mut acc, entry);
+        acc
+    })
 }
