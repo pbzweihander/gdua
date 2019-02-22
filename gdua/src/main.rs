@@ -7,7 +7,7 @@ use {
     web_view::{self, Content},
 };
 
-const HTML: &'static str = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
+const HTML: &str = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
 
 fn main() {
     use futures::future::ok;
@@ -17,7 +17,7 @@ fn main() {
     let arg = args.next().expect("Path expected");
 
     let webview = web_view::builder()
-        .title("Minimal webview example")
+        .title("Graphical Disk Usage Analyzer")
         .content(Content::Html(HTML))
         .size(800, 600)
         .resizable(true)
