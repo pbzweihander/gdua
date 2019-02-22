@@ -5,7 +5,9 @@ authors = ["pbzweihander <pbzweihander@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+gdua-core = { path = "../gdua-core" }
 tokio = "0.1.15"
 futures = "0.1.25"
 web-view = "0.4.0"
-gdua-core = { path = "../gdua-core" }
+serde = "1.0.88"
+serde_json = "1.0.38"
