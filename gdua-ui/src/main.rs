@@ -26,22 +26,31 @@ impl Renderable<Model> for Model {
 
         let data = vec![
             TreeViewData::Node(TreeViewNode {
-                label: "a".to_string(),
+                label: "Lorem ipsum dolor sit amet, consectetur adipiscing elit.".to_string(),
                 children: vec![
-                    TreeViewData::Leaf("b".to_string()),
-                    TreeViewData::Leaf("c".to_string()),
+                    TreeViewData::Leaf(
+                        "Phasellus at turpis pharetra, mattis sem et, tincidunt neque.".to_string(),
+                    ),
+                    TreeViewData::Leaf("Etiam ac augue ut risus euismod elementum.".to_string()),
                     TreeViewData::Node(TreeViewNode {
-                        label: "aa".to_string(),
+                        label: "Quisque mattis massa et lorem condimentum rutrum.".to_string(),
                         children: vec![
-                            TreeViewData::Leaf("bb".to_string()),
-                            TreeViewData::Leaf("cc".to_string()),
+                            TreeViewData::Leaf(
+                                "Nam a massa aliquam, efficitur orci porttitor, facilisis urna."
+                                    .to_string(),
+                            ),
+                            TreeViewData::Leaf(
+                                "Cras vitae turpis id magna facilisis lobortis.".to_string(),
+                            ),
                         ],
                         opened: false,
                     }),
                 ],
                 opened: true,
             }),
-            TreeViewData::Leaf("d".to_string()),
+            TreeViewData::Leaf(
+                "Suspendisse a massa in lorem malesuada egestas eu id enim.".to_string(),
+            ),
         ];
 
         html! {
