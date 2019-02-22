@@ -1,5 +1,5 @@
 use {
-    crate::FileEntry,
+    crate::{service::GduaCoreService, FileEntry},
     std::{
         collections::HashSet,
         path::{Path, PathBuf},
@@ -11,17 +11,14 @@ pub struct TreeView {
     tree: Vec<Tree>,
     opened_entries: HashSet<PathBuf>,
     entries: HashSet<PathBuf>,
-}
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct TreeViewProps {
-    pub data: Vec<FileEntry>,
+    _service: GduaCoreService,
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TreeViewMsg {
     Nothing,
     ToggleOpened(PathBuf),
+    AddFileEntry(FileEntry),
 }
 
 #[derive(Debug, Clone)]
@@ -83,37 +80,25 @@ impl TreeView {
     fn render_node(&self, node: &Node, depth: usize) -> Html<Self> {
         let opened = self.opened_entries.contains(&node.path);
 
-        let inner = if opened {
-            html! {
-                <>
-                    <i class="fas fa-chevron-down", />
-                    { node.path.file_name().unwrap_or_default().to_string_lossy() }
-                </>
-            }
-        } else {
-            html! {
-                <>
-                    <i class="fas fa-chevron-right", />
-                    { node.path.file_name().unwrap_or_default().to_string_lossy() }
-                </>
-            }
+        let inner = html! {
+            <>
+                <i class=if opened { "fas fa-chevron-down" } else { "fas fa-chevron-right" }, />
+                { node.path.file_name().unwrap_or_default().to_string_lossy() }
+            </>
         };
         let msg = TreeViewMsg::ToggleOpened(node.path.clone());
-        let li = Self::render_li(inner, depth, msg);
 
-        if opened {
-            html! {
-                <>
-                    { li }
-                    { self.render_list(&node.children, depth + 1) }
-                </>
-            }
-        } else {
-            html! {
-                <>
-                    { li }
-                </>
-            }
+        html! {
+            <>
+                { Self::render_li(inner, depth, msg) }
+                {
+                    if opened {
+                        self.render_list(&node.children, depth + 1)
+                    } else {
+                        html! { <></> }
+                    }
+                }
+            </>
         }
     }
 
@@ -122,7 +107,6 @@ impl TreeView {
             html! {
                 <>
                     { leaf.path.file_name().unwrap_or_default().to_string_lossy() }
-                    { " " }
                     <span class="badge badge-pill badge-secondary",>
                         { leaf.size }
                     </span>
@@ -142,22 +126,25 @@ impl TreeView {
 
     fn render_list(&self, tree: &[Tree], depth: usize) -> Html<Self> {
         html! {
-            <div class=if depth == 0 { "list-group list-group-root" } else { "list-group" },>
+            // <div class=if depth == 0 { "list-group list-group-root" } else { "list-group" },>
+            <>
                 { for tree.iter().map(|d| self.render_tree(d, depth))}
-            </div>
+            </>
+            // </div>
         }
     }
 }
 
 impl Component for TreeView {
     type Message = TreeViewMsg;
-    type Properties = TreeViewProps;
+    type Properties = ();
 
-    fn create(props: TreeViewProps, _: ComponentLink<Self>) -> Self {
+    fn create(_: Self::Properties, mut link: ComponentLink<Self>) -> Self {
         TreeView {
-            tree: construct_tree(&props.data),
+            tree: vec![],
             opened_entries: HashSet::new(),
-            entries: props.data.into_iter().map(|entry| entry.path).collect(),
+            entries: HashSet::new(),
+            _service: GduaCoreService::new(link.send_back(TreeViewMsg::AddFileEntry)),
         }
     }
 
@@ -171,31 +158,26 @@ impl Component for TreeView {
                     self.opened_entries.insert(path)
                 }
             }
-        }
-    }
+            TreeViewMsg::AddFileEntry(entry) => {
+                if !self.entries.contains(&entry.path) {
+                    insert_to_tree(&mut self.tree, &entry);
+                    self.entries.insert(entry.path);
 
-    #[allow(clippy::map_entry)]
-    fn change(&mut self, props: TreeViewProps) -> ShouldRender {
-        let mut changed = false;
-
-        for entry in props.data {
-            if !self.entries.contains(&entry.path) {
-                insert_to_tree(&mut self.tree, &entry);
-                self.entries.insert(entry.path);
-                changed = true;
+                    true
+                } else {
+                    false
+                }
             }
         }
-
-        changed
     }
 }
 
 impl Renderable<TreeView> for TreeView {
     fn view(&self) -> Html<Self> {
         html! {
-            <>
+            <div class="list-group",>
                 { self.render_list(&self.tree, 0) }
-            </>
+            </div>
         }
     }
 }

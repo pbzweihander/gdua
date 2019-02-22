@@ -7,3 +7,6 @@ edition = "2018"
 [dependencies]
 yew = { git = "https://github.com/DenisKolodin/yew", branch = "master" }
 stdweb = "0.4.14"
+serde_derive = "1.0.88"
+serde = "1.0.88"
+lazy_static = "1.2.0"
