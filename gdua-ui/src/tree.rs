@@ -174,9 +174,27 @@ impl Component for TreeView {
 
 impl Renderable<TreeView> for TreeView {
     fn view(&self) -> Html<Self> {
+        let mut tree = &self.tree;
+
+        while {
+            if tree.len() == 1 {
+                let node = &tree[0];
+
+                match node {
+                    Tree::Leaf(_) => false,
+                    Tree::Node(ref n) => {
+                        tree = &n.children;
+                        true
+                    }
+                }
+            } else {
+                false
+            }
+        } {}
+
         html! {
             <div class="list-group",>
-                { self.render_list(&self.tree, 0) }
+                { self.render_list(tree, 0) }
             </div>
         }
     }
