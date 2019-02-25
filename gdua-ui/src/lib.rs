@@ -2,6 +2,7 @@
 extern crate stdweb;
 
 pub mod app;
+mod chart;
 mod service;
 mod tree;
 

@@ -7,20 +7,6 @@ use {
     yew::{html, prelude::*},
 };
 
-pub struct TreeView {
-    tree: Vec<Tree>,
-    opened_entries: HashSet<PathBuf>,
-    entries: HashSet<PathBuf>,
-    _service: GduaCoreService,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TreeViewMsg {
-    Nothing,
-    ToggleOpened(PathBuf),
-    AddFileEntry(FileEntry),
-}
-
 #[derive(Debug, Clone)]
 struct Node {
     path: PathBuf,
@@ -61,6 +47,26 @@ impl PartialEq for Tree {
     }
 }
 
+pub struct TreeView {
+    tree: Vec<Tree>,
+    opened_entries: HashSet<PathBuf>,
+    entries: HashSet<PathBuf>,
+    _service: GduaCoreService,
+    fetch_to_chart: Option<Callback<(Vec<u64>, Vec<String>)>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TreeViewMsg {
+    Nothing,
+    ToggleOpened(PathBuf),
+    AddFileEntry(FileEntry),
+}
+
+#[derive(Clone, PartialEq, Default)]
+pub struct TreeViewProps {
+    pub fetch_to_chart: Option<Callback<(Vec<u64>, Vec<String>)>>,
+}
+
 impl TreeView {
     fn render_li(inner: Html<Self>, nested: usize, onclick_msg: TreeViewMsg) -> Html<Self> {
         let disabled = onclick_msg == TreeViewMsg::Nothing;
@@ -82,7 +88,13 @@ impl TreeView {
 
         let inner = html! {
             <>
-                <i class=if opened { "fas fa-chevron-down" } else { "fas fa-chevron-right" }, />
+                <i
+                    class=if opened {
+                        "fas fa-chevron-down mr-1"
+                    } else {
+                        "fas fa-chevron-right mr-1"
+                    },
+                />
                 { node.path.file_name().unwrap_or_default().to_string_lossy() }
             </>
         };
@@ -107,7 +119,7 @@ impl TreeView {
             html! {
                 <>
                     { leaf.path.file_name().unwrap_or_default().to_string_lossy() }
-                    <span class="badge badge-pill badge-secondary",>
+                    <span class="badge badge-pill badge-secondary ml-2",>
                         { leaf.size }
                     </span>
                 </>
@@ -137,14 +149,15 @@ impl TreeView {
 
 impl Component for TreeView {
     type Message = TreeViewMsg;
-    type Properties = ();
+    type Properties = TreeViewProps;
 
-    fn create(_: Self::Properties, mut link: ComponentLink<Self>) -> Self {
+    fn create(props: TreeViewProps, mut link: ComponentLink<Self>) -> Self {
         TreeView {
             tree: vec![],
             opened_entries: HashSet::new(),
             entries: HashSet::new(),
             _service: GduaCoreService::new(link.send_back(TreeViewMsg::AddFileEntry)),
+            fetch_to_chart: props.fetch_to_chart,
         }
     }
 
@@ -152,6 +165,13 @@ impl Component for TreeView {
         match msg {
             TreeViewMsg::Nothing => false,
             TreeViewMsg::ToggleOpened(path) => {
+                if let Some(ref callback) = self.fetch_to_chart {
+                    callback.emit((
+                        vec![10, 20, 40],
+                        vec!["foo".to_string(), "bar".to_string(), "baz".to_string()],
+                    ));
+                }
+
                 if self.opened_entries.contains(&path) {
                     self.opened_entries.remove(&path)
                 } else {
@@ -169,6 +189,11 @@ impl Component for TreeView {
                 }
             }
         }
+    }
+
+    fn change(&mut self, props: TreeViewProps) -> ShouldRender {
+        self.fetch_to_chart = props.fetch_to_chart;
+        false
     }
 }
 
