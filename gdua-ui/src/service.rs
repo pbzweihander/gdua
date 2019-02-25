@@ -5,15 +5,15 @@ pub struct GduaCoreService {
 }
 
 impl GduaCoreService {
-    pub fn new(callback: Callback<FileEntry>) -> Self {
-        let callback = move |entry| {
-            callback.emit(entry);
+    pub fn new(callback: Callback<Vec<FileEntry>>) -> Self {
+        let callback = move |entries| {
+            callback.emit(entries);
         };
 
         let handle = js! {
             var callback = @{callback};
-            window.fetch_file_entry = function (file_entry) {
-                callback(file_entry);
+            window.fetch_file_entries = function (file_entries) {
+                callback(file_entries);
             };
 
             return {

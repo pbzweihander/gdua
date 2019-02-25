@@ -59,7 +59,7 @@ pub struct TreeView {
 pub enum TreeViewMsg {
     Nothing,
     ToggleOpened(PathBuf),
-    AddFileEntry(FileEntry),
+    AddFileEntries(Vec<FileEntry>),
 }
 
 #[derive(Clone, PartialEq, Default)]
@@ -156,7 +156,7 @@ impl Component for TreeView {
             tree: vec![],
             opened_entries: HashSet::new(),
             entries: HashSet::new(),
-            _service: GduaCoreService::new(link.send_back(TreeViewMsg::AddFileEntry)),
+            _service: GduaCoreService::new(link.send_back(TreeViewMsg::AddFileEntries)),
             fetch_to_chart: props.fetch_to_chart,
         }
     }
@@ -178,15 +178,14 @@ impl Component for TreeView {
                     self.opened_entries.insert(path)
                 }
             }
-            TreeViewMsg::AddFileEntry(entry) => {
-                if !self.entries.contains(&entry.path) {
-                    insert_to_tree(&mut self.tree, &entry);
-                    self.entries.insert(entry.path);
-
-                    true
-                } else {
-                    false
+            TreeViewMsg::AddFileEntries(entries) => {
+                for entry in entries {
+                    if !self.entries.contains(&entry.path) {
+                        insert_to_tree(&mut self.tree, &entry);
+                        self.entries.insert(entry.path);
+                    }
                 }
+                true
             }
         }
     }

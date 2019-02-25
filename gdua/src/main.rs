@@ -2,8 +2,9 @@ use {
     futures::prelude::*,
     gdua_core::analyze_disk_usage,
     serde_json::to_string,
-    std::{env::args, path::PathBuf, str::FromStr},
+    std::{env::args, path::PathBuf, str::FromStr, time::Duration},
     tokio::runtime::Runtime,
+    tokio_batch::Chunks,
     web_view::{self, Content},
 };
 
@@ -29,22 +30,24 @@ fn main() {
 
     let webview_handle = webview.handle();
 
-    let fut =
-        analyze_disk_usage(PathBuf::from_str(&arg).expect("Invalid path")).for_each(move |entry| {
-            let _ = webview_handle
-                .dispatch(move |webview| {
-                    webview.eval(&format!(
-                        "window.fetch_file_entry({})",
-                        to_string(&entry).unwrap()
-                    ))
-                })
-                .ok();
-            ok(())
-        });
+    let stream = analyze_disk_usage(PathBuf::from_str(&arg).expect("Invalid path"));
+    let chunked_stream = Chunks::new(stream, 10, Duration::from_secs(1));
+
+    let fut = chunked_stream.for_each(move |entry| {
+        let _ = webview_handle
+            .dispatch(move |webview| {
+                webview.eval(&format!(
+                    "window.fetch_file_entries({})",
+                    to_string(&entry).unwrap()
+                ))
+            })
+            .ok();
+        ok(())
+    });
 
     let mut rt = Runtime::new().unwrap();
 
-    rt.spawn(fut.map_err(|e| eprintln!("{}", e)));
+    rt.spawn(fut.map_err(|e| eprintln!("{:?}", e)));
 
     webview.run().unwrap();
     rt.shutdown_now().wait().unwrap();
