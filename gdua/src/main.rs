@@ -1,14 +1,21 @@
 use {
     futures::prelude::*,
-    gdua_core::analyze_disk_usage,
+    gdua_core::{analyze_disk_usage, FileEntry},
     serde_json::to_string,
     std::{env::args, path::PathBuf, str::FromStr, time::Duration},
     tokio::runtime::Runtime,
     tokio_batch::Chunks,
-    web_view::{self, Content},
+    web_view::{self, Content, WVResult, WebView},
 };
 
 const HTML: &str = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
+
+fn fetch_file_entries<T>(webview: &mut WebView<T>, entries: &[FileEntry]) -> WVResult {
+    webview.eval(&format!(
+        "window.fetch_file_entries({})",
+        to_string(entries).unwrap()
+    ))
+}
 
 fn main() {
     use futures::future::ok;
@@ -35,12 +42,7 @@ fn main() {
 
     let fut = chunked_stream.for_each(move |entry| {
         let _ = webview_handle
-            .dispatch(move |webview| {
-                webview.eval(&format!(
-                    "window.fetch_file_entries({})",
-                    to_string(&entry).unwrap()
-                ))
-            })
+            .dispatch(move |mut webview| fetch_file_entries(&mut webview, &entry))
             .ok();
         ok(())
     });
