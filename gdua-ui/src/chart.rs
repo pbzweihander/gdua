@@ -1,50 +1,23 @@
 use {
-    serde_derive::Serialize,
+    crate::{tree::Tree, PartialEqMutex},
+    std::rc::Rc,
     stdweb::{
-        js_serializable,
         web::{document, Element, INonElementParentNode},
         Value,
     },
     yew::{html, prelude::*},
 };
 
-#[derive(Debug, Clone, Serialize)]
-struct ChartDataset {
-    data: Vec<u64>,
-    #[serde(rename = "backgroundColor")]
-    background_color: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct ChartData {
-    datasets: Vec<ChartDataset>,
-    labels: Vec<String>,
-}
-
-impl From<(Vec<u64>, Vec<String>)> for ChartData {
-    fn from(d: (Vec<u64>, Vec<String>)) -> Self {
-        ChartData {
-            datasets: vec![ChartDataset {
-                data: d.0,
-                background_color: vec!["#ff0000".to_string(); d.1.len()],
-            }],
-            labels: d.1,
-        }
-    }
-}
-
-js_serializable!(ChartData);
-
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ChartProps {
-    pub data: Vec<u64>,
-    pub labels: Vec<String>,
+    pub data: Rc<PartialEqMutex<Vec<Tree>>>,
+    pub update: usize,
 }
 
 pub struct Chart {
     ctx: Option<Element>,
     chart: Option<Value>,
-    data: ChartData,
+    data: Rc<PartialEqMutex<Vec<Tree>>>,
 }
 
 impl Component for Chart {
@@ -52,20 +25,10 @@ impl Component for Chart {
     type Properties = ChartProps;
 
     fn create(props: Self::Properties, _: ComponentLink<Self>) -> Self {
-        js! {
-            window.onbeforeprint = function () {
-                for (var id in Chart.instances) {
-                    Chart.instances[id].resize();
-                }
-            };
-        };
-
-        let data = (props.data, props.labels).into();
-
         Chart {
             ctx: None,
             chart: None,
-            data,
+            data: props.data,
         }
     }
 
@@ -74,7 +37,7 @@ impl Component for Chart {
     }
 
     fn change(&mut self, props: Self::Properties) -> ShouldRender {
-        self.data = (props.data, props.labels).into();
+        self.data = props.data;
 
         if self.ctx.is_none() {
             self.ctx = document().get_element_by_id("chart");
@@ -83,30 +46,24 @@ impl Component for Chart {
         if let Some(ref ctx) = self.ctx {
             if self.chart.is_none() {
                 self.chart = Some(js! {
-                    var chart = new Chart(@{ctx}, {
-                        type: "doughnut",
-                        data: @{&self.data},
-                        options: {
-                            legend: {
-                                display: false,
-                            },
-                            layout: {
-                                padding: 20,
-                            },
-                            aspectRatio: 1,
-                        },
-                    });
+                    var chart = Sunburst()(@{ctx});
+
+                    window.onresize = function() {
+                        chart
+                            .width(document.getElementById("chart").offsetWidth)
+                            .height(document.getElementById("chart").offsetWidth);
+                    };
+                    window.onresize();
+
                     return chart;
                 });
             }
         }
 
-        if self.ctx.is_some() && self.chart.is_some() {
-            js! {
-                @{&self.chart}.data = @{&self.data};
-                @{&self.chart}.update();
-            }
-        }
+        let data = self.data.0.lock().unwrap();
+        js! {
+            @{&self.chart}.data({ name: "main", children: @{&*data} });
+        };
 
         true
     }
@@ -115,7 +72,7 @@ impl Component for Chart {
 impl Renderable<Chart> for Chart {
     fn view(&self) -> Html<Self> {
         html! {
-            <canvas id="chart",></canvas>
+            <div id="chart", class="w-100",></div>
         }
     }
 }

@@ -1,14 +1,20 @@
 use {
-    crate::{chart::Chart, tree::TreeView},
+    crate::{
+        chart::Chart,
+        tree::{Tree, TreeView},
+        PartialEqMutex,
+    },
+    std::{rc::Rc, sync::Mutex},
     yew::{html, prelude::*},
 };
 
 pub struct App {
-    chart_data: (Vec<u64>, Vec<String>),
+    data: Rc<PartialEqMutex<Vec<Tree>>>,
+    update: usize,
 }
 
 pub enum AppMsg {
-    FetchToChart((Vec<u64>, Vec<String>)),
+    Update,
 }
 
 impl Component for App {
@@ -17,13 +23,14 @@ impl Component for App {
 
     fn create(_: Self::Properties, _: ComponentLink<Self>) -> Self {
         App {
-            chart_data: (vec![], vec![]),
+            data: Rc::new(PartialEqMutex(Mutex::new(vec![]))),
+            update: 0,
         }
     }
 
-    fn update(&mut self, msg: AppMsg) -> ShouldRender {
+    fn update(&mut self, msg: Self::Message) -> ShouldRender {
         match msg {
-            AppMsg::FetchToChart(data) => self.chart_data = data,
+            AppMsg::Update => self.update += 1,
         }
         true
     }
@@ -44,17 +51,20 @@ impl Renderable<App> for App {
                     align-items-start",
             >
                 <div class="w-100 w-md-50 h-100
-                    mr-md-3
-                    overflow-auto",
+                    mr-md-3 overflow-auto",
                 >
-                    <TreeView: fetch_to_chart=AppMsg::FetchToChart,/>
+                    <TreeView:
+                        data=self.data.clone(),
+                        update=|_| AppMsg::Update,
+                    />
                 </div>
-                <div class="w-100 w-md-50
-                    ml-md-3 mb-3 mb-md-0",
+                <div class="w-100 w-md-50 h-100
+                    ml-md-3 mb-3 mb-md-0
+                    d-flex align-items-stretch",
                 >
                     <Chart:
-                        data=self.chart_data.0.clone(),
-                        labels=self.chart_data.1.clone(),
+                        data=self.data.clone(),
+                        update=self.update,
                     />
                 </div>
             </div>

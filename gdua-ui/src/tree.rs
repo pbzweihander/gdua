@@ -1,14 +1,19 @@
 use {
-    crate::{service::GduaCoreService, FileEntry},
+    crate::{service::GduaCoreService, FileEntry, PartialEqMutex},
+    serde_derive::Serialize,
     std::{
         collections::HashSet,
         path::{Path, PathBuf},
+        rc::Rc,
     },
+    stdweb::js_serializable,
     yew::{html, prelude::*},
 };
 
-#[derive(Debug, Clone)]
-struct Node {
+#[derive(Debug, Clone, Serialize)]
+pub struct Node {
+    name: String,
+    #[serde(skip)]
     path: PathBuf,
     children: Vec<Tree>,
 }
@@ -19,9 +24,12 @@ impl PartialEq for Node {
     }
 }
 
-#[derive(Debug, Clone)]
-struct Leaf {
+#[derive(Debug, Clone, Serialize)]
+pub struct Leaf {
+    name: String,
+    #[serde(skip)]
     path: PathBuf,
+    #[serde(rename = "value")]
     size: u64,
 }
 
@@ -31,11 +39,14 @@ impl PartialEq for Leaf {
     }
 }
 
-#[derive(Debug, Clone)]
-enum Tree {
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum Tree {
     Node(Node),
     Leaf(Leaf),
 }
+
+js_serializable!(Tree);
 
 impl PartialEq for Tree {
     fn eq(&self, other: &Self) -> bool {
@@ -48,11 +59,11 @@ impl PartialEq for Tree {
 }
 
 pub struct TreeView {
-    tree: Vec<Tree>,
+    data: Rc<PartialEqMutex<Vec<Tree>>>,
     opened_entries: HashSet<PathBuf>,
     entries: HashSet<PathBuf>,
     _service: GduaCoreService,
-    fetch_to_chart: Option<Callback<(Vec<u64>, Vec<String>)>>,
+    update: Option<Callback<()>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,7 +75,8 @@ pub enum TreeViewMsg {
 
 #[derive(Clone, PartialEq, Default)]
 pub struct TreeViewProps {
-    pub fetch_to_chart: Option<Callback<(Vec<u64>, Vec<String>)>>,
+    pub data: Rc<PartialEqMutex<Vec<Tree>>>,
+    pub update: Option<Callback<()>>,
 }
 
 impl TreeView {
@@ -95,7 +107,7 @@ impl TreeView {
                         "fas fa-chevron-right mr-1"
                     },
                 />
-                { node.path.file_name().unwrap_or_default().to_string_lossy() }
+                { &node.name }
             </>
         };
         let msg = TreeViewMsg::ToggleOpened(node.path.clone());
@@ -118,7 +130,7 @@ impl TreeView {
         Self::render_li(
             html! {
                 <>
-                    { leaf.path.file_name().unwrap_or_default().to_string_lossy() }
+                    { &leaf.name }
                     <span class="badge badge-pill badge-secondary ml-2",>
                         { leaf.size }
                     </span>
@@ -138,11 +150,9 @@ impl TreeView {
 
     fn render_list(&self, tree: &[Tree], depth: usize) -> Html<Self> {
         html! {
-            // <div class=if depth == 0 { "list-group list-group-root" } else { "list-group" },>
             <>
                 { for tree.iter().map(|d| self.render_tree(d, depth))}
             </>
-            // </div>
         }
     }
 }
@@ -153,11 +163,11 @@ impl Component for TreeView {
 
     fn create(props: TreeViewProps, mut link: ComponentLink<Self>) -> Self {
         TreeView {
-            tree: vec![],
+            data: props.data,
             opened_entries: HashSet::new(),
             entries: HashSet::new(),
             _service: GduaCoreService::new(link.send_back(TreeViewMsg::AddFileEntries)),
-            fetch_to_chart: props.fetch_to_chart,
+            update: props.update,
         }
     }
 
@@ -165,13 +175,6 @@ impl Component for TreeView {
         match msg {
             TreeViewMsg::Nothing => false,
             TreeViewMsg::ToggleOpened(path) => {
-                if let Some(ref callback) = self.fetch_to_chart {
-                    callback.emit((
-                        vec![10, 20, 40],
-                        vec!["foo".to_string(), "bar".to_string(), "baz".to_string()],
-                    ));
-                }
-
                 if self.opened_entries.contains(&path) {
                     self.opened_entries.remove(&path)
                 } else {
@@ -179,26 +182,30 @@ impl Component for TreeView {
                 }
             }
             TreeViewMsg::AddFileEntries(entries) => {
+                let mut tree = self.data.0.lock().unwrap();
                 for entry in entries {
                     if !self.entries.contains(&entry.path) {
-                        insert_to_tree(&mut self.tree, &entry);
+                        insert_to_tree(&mut *tree, &entry);
                         self.entries.insert(entry.path);
                     }
+                }
+                if let Some(ref update) = self.update {
+                    update.emit(());
                 }
                 true
             }
         }
     }
 
-    fn change(&mut self, props: TreeViewProps) -> ShouldRender {
-        self.fetch_to_chart = props.fetch_to_chart;
+    fn change(&mut self, _: TreeViewProps) -> ShouldRender {
         false
     }
 }
 
 impl Renderable<TreeView> for TreeView {
     fn view(&self) -> Html<Self> {
-        let mut tree = &self.tree;
+        let data = self.data.0.lock().unwrap();
+        let mut tree = &*data;
 
         while {
             if tree.len() == 1 {
@@ -237,12 +244,22 @@ fn merge_tree(tree: &mut Vec<Tree>, mut ancestors: Vec<PathBuf>, leaf: Leaf) {
 
         let new_tree = ancestors.into_iter().fold(Tree::Leaf(leaf), |acc, path| {
             Tree::Node(Node {
+                name: path
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .to_string(),
                 path: path,
                 children: vec![acc],
             })
         });
 
         tree.push(Tree::Node(Node {
+            name: outermost
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string(),
             path: outermost,
             children: vec![new_tree],
         }));
@@ -260,6 +277,12 @@ fn insert_to_tree(tree: &mut Vec<Tree>, entry: &FileEntry) {
         .collect();
 
     let leaf = Leaf {
+        name: entry
+            .path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
         path: entry.path.clone(),
         size: entry.size,
     };
